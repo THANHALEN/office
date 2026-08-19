@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kê Khai Thuế GTGT — Mẫu 01/TT80</title>
+  
+  <!-- CDN React, ReactDOM, Babel & Tailwind CSS -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { display: inline-block; animation: spin 1s linear infinite; }
+    input:focus, select:focus { outline: 2px solid #c9a822; outline-offset: 1px; }
+    tr:hover td { background: rgba(201,168,34,0.04); }
+    .clickable-num { cursor: pointer; transition: background 0.15s; }
+    .clickable-num:hover { background-color: #f5e78a !important; color: #0f2240 !important; border-radius: 3px; }
+    
+    /* Custom Toggle Switch Style */
+    .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #2a4a7f; transition: .3s; border-radius: 22px; }
+    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    input:checked + .slider { background-color: #c9a822; }
+    input:checked + .slider:before { transform: translateX(18px); }
+  </style>
+</head>
+<body class="bg-[#eef1f7] min-h-screen text-[#1a2535]">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    const VND = (n) => (typeof n === "number" ? Math.round(n).toLocaleString("vi-VN") : "0");
+    const parseNum = (s) => parseFloat(String(s || "0").replace(/\./g, "").replace(/,/g, ".")) || 0;
+
+    const C = {
+      navy: "#1a3560", navyDark: "#0f2240", navyLight: "#2a4a7f",
+      gold: "#c9a822", goldLight: "#f5e78a", goldBg: "#fdf8e7",
+      bg: "#eef1f7", white: "#ffffff", border: "#cdd6e8",
+      text: "#1a2535", muted: "#5a6b82", green: "#1a6b3c", greenBg: "#e8f5ee",
+      red: "#b91c1c", redBg: "#fef2f2", section: "#e4eaf5", total: "#d6e4f7",
+      amber: "#a16207", amberBg: "#fef9e7",
+    };
+
+    function App() {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      const currentQuarter = Math.ceil(currentMonth / 3);
+
+      const [tab, setTab] = useState("guide");
+      const [muaFiles, setMuaFiles] = useState([]);
+      const [banFiles, setBanFiles] = useState([]);
+      const [processing, setProcessing] = useState(false);
+      const [procMsg, setProcMsg] = useState("");
+      const [progress, setProgress] = useState(0);
+      const [rawParsedData, setRawParsedData] = useState(null);
+      const [invoiceData, setInvoiceData] = useState(null);
+      const [formData, setFormData] = useState(null);
+      const [error, setError] = useState("");
+
+      const [isMonthMode, setIsMonthMode] = useState(false);
+      const [selectedQuarter, setSelectedQuarter] = useState(currentQuarter);
+      const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+
+      const [showReplacedDetails, setShowReplacedDetails] = useState(false);
+      const [showInvalidDetails, setShowInvalidDetails] = useState(false);
+
+      const [baseFontSize, setBaseFontSize] = useState(13);
+      const [toastMsg, setToastMsg] = useState("");
+
+      const [f22, setF22] = useState("0");
+      const [f37, setF37] = useState("0");
+      const [f38, setF38] = useState("0");
+      const [f39a, setF39a] = useState("0");
+      const [f40b, setF40b] = useState("0");
+      const [f42, setF42] = useState("0");
+      const [dragMua, setDragMua] = useState(false);
+      const [dragBan, setDragBan] = useState(false);
+      const [invCat, setInvCat] = useState({});
+      const [excludeReplaced, setExcludeReplaced] = useState(new Set());
+
+      const muaRef = useRef();
+      const banRef = useRef();
+
+      const getPeriodLabel = () => {
+        if (!isMonthMode) return `Quý ${selectedQuarter}/${currentYear}`;
+        return `Tháng ${selectedMonth}/${currentYear}`;
+      };
+
+      const getPeriodOfDate = (dateStr) => {
+        if (!dateStr) return null;
+        const parts = dateStr.split("/");
+        if (parts.length !== 3) return null;
+        const m = parseInt(parts[1], 10);
+        const y = parseInt(parts[2], 10);
+        const q = Math.ceil(m / 3);
+        return { y, m, q };
+      };
+
+      const isDateInSelectedPeriod = (dateStr) => {
+        const p = getPeriodOfDate(dateStr);
+        if (!p) return false;
+        if (p.y !== currentYear) return false;
+        if (!isMonthMode) return p.q === selectedQuarter;
+        return p.m === selectedMonth;
+      };
+
+      const handleCopy = (text) => {
+        const formattedStr = typeof text === "number" ? (text === 0 ? "-" : VND(text)) : String(text);
+        navigator.clipboard.writeText(formattedStr);
+        setToastMsg(`Đã sao chép: ${formattedStr}`);
+        setTimeout(() => setToastMsg(""), 2000);
+      };
+
+      const readText = (file) => new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = (e) => res(e.target.result);
+        r.onerror = () => rej(new Error("Lỗi đọc file"));
+        r.readAsText(file, "UTF-8");
+      });
+
+      const parseXMLInvoice = (text, type, fileName) => {
+        const doc = new DOMParser().parseFromString(text, "text/xml");
+        if (doc.querySelector("parsererror")) throw new Error(`XML lỗi cú pháp: ${fileName}`);
+        const tag = (root, name) => { if (!root) return null; const e = root.getElementsByTagName(name); return e.length ? e[0] : null; };
+        const t = (root, name) => { const e = tag(root, name); return e ? e.textContent.trim() : ""; };
+        const n = (s) => parseFloat(String(s || "").replace(/,/g, "")) || 0;
+
+        const khhdonRaw = t(doc, "KHHDon");
+        const kh = t(doc, "KHMSHDon") + khhdonRaw;
+        const so = t(doc, "SHDon");
+        
+        const invoiceNumber = (kh ? kh + " - " : "") + (so || "");
+        const nlap = t(doc, "NLap") || t(doc, "NgayLap");
+        const invoiceDate = nlap ? nlap.split("T")[0].split("-").reverse().join("/") : "";
+        const nban = tag(doc, "NBan"), nmua = tag(doc, "NMua");
+
+        let subTotal = n(t(doc, "TgTCThue"));
+        let totalVAT = n(t(doc, "TgTThue"));
+        let totalAmount = n(t(doc, "TgTTTBSo"));
+
+        const vatBreakdown = [];
+        const lts = doc.getElementsByTagName("LTSuat");
+        for (const lt of lts) {
+          const raw = (t(lt, "TSuat") || "").trim();
+          const base = n(t(lt, "ThTien"));
+          const vat = n(t(lt, "TThue"));
+          if (!base && !vat) continue;
+          const rl = raw.toUpperCase().replace(/\s/g, "");
+          let vatRate;
+          if (/KCT/.test(rl)) vatRate = "KCT";
+          else if (/KKKNT|KKK|KHAC/.test(rl)) vatRate = "KKKNT";
+          else { 
+            const m = raw.match(/(\d+(?:[.,]\d+)?)/); 
+            vatRate = m ? `${m[1].replace(",", ".")}%` : raw || "KCT"; 
+          }
+          vatBreakdown.push({ vatRate, baseAmount: base, vatAmount: vat, _raw: raw });
+        }
+
+        const items = [];
+        const hhdvuNodes = doc.getElementsByTagName("HHDVu");
+        for (let i = 0; i < hhdvuNodes.length; i++) {
+          const node = hhdvuNodes[i];
+          const tenHang = t(node, "THHDVu");
+          const baseAmt = n(t(node, "ThTien"));
+          const vatAmt = n(t(node, "TThue"));
+          const rawRate = (t(node, "TSuat") || "").trim();
+          
+          if (!tenHang && !baseAmt) continue;
+
+          let rateStr = "KCT";
+          const rl = rawRate.toUpperCase().replace(/\s/g, "");
+          if (/KCT/.test(rl)) rateStr = "KCT";
+          else if (/KKKNT|KKK|KHAC/.test(rl)) rateStr = "KKKNT";
+          else {
+            const m = rawRate.match(/(\d+(?:[.,]\d+)?)/);
+            if (m) rateStr = `${m[1].replace(",", ".")}%`;
+            else if (baseAmt > 0 && vatAmt > 0) {
+              const calcR = Math.round((vatAmt / baseAmt) * 100);
+              rateStr = `${calcR}%`;
+            }
+          }
+
+          items.push({
+            stt: i + 1,
+            ten: tenHang || `Mặt hàng ${i + 1}`,
+            baseAmount: baseAmt,
+            vatAmount: vatAmt,
+            vatRate: rateStr,
+            _rawRate: rawRate
+          });
+        }
+        
+        if (!vatBreakdown.length && subTotal) {
+          const inferred = totalVAT > 0 ? `${Math.round((totalVAT / subTotal) * 100)}%` : "0%";
+          vatBreakdown.push({ vatRate: inferred, baseAmount: subTotal, vatAmount: totalVAT, _raw: inferred });
+        }
+        if (!subTotal) subTotal = vatBreakdown.reduce((s, v) => s + v.baseAmount, 0);
+        if (!totalVAT) totalVAT = vatBreakdown.reduce((s, v) => s + v.vatAmount, 0);
+        if (!totalAmount) totalAmount = subTotal + totalVAT;
+
+        const ghiChu = t(doc, "GhiChu") || t(doc, "TTKhac") || "";
+        const noteTxt = (ghiChu + " " + t(doc, "TTKhac")).trim();
+        const isImport = /nh[aậ]p\s*kh[aẩ]u|import|t[oờ]\s*khai\s*h[aả]i\s*quan/i.test(noteTxt);
+
+        let relType = null, relKey = "", relNum = "", relDate = "";
+        const tthd = tag(doc, "TTHDLQuan");
+        if (tthd) {
+          const tc = t(tthd, "TCHDon");
+          relKey = t(tthd, "KHHDCLQuan");
+          relNum = t(tthd, "SHDCLQuan");
+          relDate = t(tthd, "NLHDCLQuan");
+          const relNote = t(tthd, "GChu") || t(tthd, "GhiChu");
+          if (/đi[eề]u\s*ch[iỉ]nh/i.test(relNote)) relType = "dieuchinh";
+          else if (/thay\s*th[eế]/i.test(relNote)) relType = "thaythe";
+          else if (tc === "2") relType = "dieuchinh";
+          else if (tc === "1") relType = "thaythe";
+          else if (relNum) relType = "thaythe";
+        }
+
+        let relatedInvoiceDisplay = "-";
+        if (relNum) {
+          relatedInvoiceDisplay = (relKey ? relKey + " - " : "") + relNum;
+        }
+
+        return {
+          invoiceNumber, invoiceDate,
+          khHieu: khhdonRaw, soHD: so,
+          sellerName: t(nban, "Ten"), sellerTaxCode: t(nban, "MST"),
+          buyerName: t(nmua, "Ten"), buyerTaxCode: t(nmua, "MST"),
+          subTotal, totalVAT, totalAmount, vatBreakdown, items, note: noteTxt, isImport,
+          relType, relKey, relNum, relDate, relatedInvoiceDisplay,
+          isDeductible: true, notDeclarable: false, taxExempt: false,
+          _fileName: fileName, _type: type, _source: "xml",
+        };
+      };
+
+      const processInvoiceList = (invoices) => {
+        const validInvoices = [];
+        const invalidOtherPeriodInvoices = [];
+        const replacementPairs = [];
+        const replacementMap = new Map();
+
+        for (const inv of invoices) {
+          const inPeriod = isDateInSelectedPeriod(inv.invoiceDate);
+
+          if (inPeriod) {
+            validInvoices.push(inv);
+          } else {
+            if (inv.relType === "thaythe" || inv.relType === "dieuchinh") {
+              const relInPeriod = isDateInSelectedPeriod(inv.relDate);
+              const partnerTax = inv._type === "mua" ? inv.sellerTaxCode : inv.buyerTaxCode;
+              const hasGocInPeriod = invoices.some(o => 
+                isDateInSelectedPeriod(o.invoiceDate) &&
+                String(o.soHD) === String(inv.relNum) &&
+                ((o._type === "mua" ? o.sellerTaxCode : o.buyerTaxCode) === partnerTax)
+              );
+
+              if (relInPeriod || hasGocInPeriod) {
+                validInvoices.push(inv);
+              } else {
+                invalidOtherPeriodInvoices.push(inv);
+              }
+            } else {
+              invalidOtherPeriodInvoices.push(inv);
+            }
+          }
+        }
+
+        const replInvoices = validInvoices.filter(inv => inv.relType === "thaythe" && inv.relNum);
+        for (const inv of replInvoices) {
+          const partnerTax = inv._type === "mua" ? inv.sellerTaxCode : inv.buyerTaxCode;
+          const goc = validInvoices.find(o =>
+            o !== inv &&
+            String(o.soHD) === String(inv.relNum) &&
+            (!inv.relKey || o.khHieu === inv.relKey) &&
+            (o._type === inv._type) &&
+            ((o._type === "mua" ? o.sellerTaxCode : o.buyerTaxCode) === partnerTax)
+          );
+          if (goc) {
+            replacementPairs.push({ thayThe: inv, goc });
+            replacementMap.set(goc._fileName, inv);
+          }
+        }
+
+        const excludeGocSet = new Set(Array.from(replacementMap.keys()));
+        return { validInvoices, invalidOtherPeriodInvoices, replacementPairs, excludeGocSet };
+      };
+
+      const addFiles = (existing, newFs, setter) => {
+        const valid = Array.from(newFs).filter((f) => /\.xml$/i.test(f.name));
+        if (!valid.length) { setError("Chỉ hỗ trợ file .xml"); return; }
+        const dups = valid.filter(f => existing.some(e => e.name === f.name && e.size === f.size));
+        const unique = valid.filter(f => !existing.some(e => e.name === f.name && e.size === f.size));
+        if (dups.length) setError(`${dups.length} file trùng lặp đã bỏ qua`); else setError("");
+        setter([...existing, ...unique]);
+      };
+
+      const calcFormWith = (muaInvs, banInvs, excludeReplaced = new Set()) => {
+        const v22 = parseNum(f22), v37 = parseNum(f37), v38 = parseNum(f38),
+              v39a = parseNum(f39a), v40b = parseNum(f40b), v42 = parseNum(f42);
+
+        let c26 = 0, c29 = 0, c30 = 0, c31 = 0, c32 = 0, c32a = 0, c33 = 0;
+        let c8base = 0;
+        const pl8Ban = [];
+
+        for (const inv of banInvs) {
+          if (excludeReplaced.has(inv._fileName)) continue;
+          const cat = invCat[inv._fileName] || (inv.notDeclarable ? "platform" : (inv.taxExempt ? "exempt" : "taxed"));
+          const base = inv.subTotal || 0;
+          if (cat === "platform") { c32a += base; continue; }
+          if (cat === "exempt")   { c26  += base; continue; }
+
+          const vbs = inv.vatBreakdown || [];
+          if (!vbs.length) { c32 += base; c33 += inv.totalVAT || 0; continue; }
+
+          for (const vb of vbs) {
+            if (!vb.baseAmount && !vb.vatAmount) continue;
+            const rate = String(vb.vatRate || "").trim();
+            if (rate === "KCT") c26 += vb.baseAmount;
+            else if (rate === "KKKNT") c32a += vb.baseAmount;
+            else if (rate === "0%") c29 += vb.baseAmount;
+            else if (rate === "5%") { c30 += vb.baseAmount; c31 += vb.vatAmount || 0; }
+            else if (rate === "8%") {
+              c32 += vb.baseAmount; c33 += vb.vatAmount || 0; c8base += vb.baseAmount;
+            }
+            else { c32 += vb.baseAmount; c33 += vb.vatAmount || 0; }
+          }
+
+          if (inv.items && inv.items.length > 0) {
+            for (const item of inv.items) {
+              if (item.vatRate === "8%" && item.baseAmount) {
+                pl8Ban.push({
+                  ten: item.ten,
+                  hd: inv.invoiceNumber || "",
+                  gtri: item.baseAmount,
+                  duocGiam: Math.round(item.baseAmount * 0.08),
+                });
+              }
+            }
+          } else {
+            for (const vb of vbs) {
+              if (String(vb.vatRate).trim() === "8%" && vb.baseAmount) {
+                pl8Ban.push({
+                  ten: `Hàng hóa, dịch vụ GTGT 8%`,
+                  hd: inv.invoiceNumber || "",
+                  gtri: vb.baseAmount,
+                  duocGiam: Math.round(vb.baseAmount * 0.08),
+                });
+              }
+            }
+          }
+        }
+
+        const c27 = c29 + c30 + c32 + c32a;
+        const c28 = c31 + c33;
+        const c34 = c26 + c27;
+        const c35 = c28;
+
+        const allocDenom = c27 + c26;
+        const ratio = allocDenom > 0 ? c27 / allocDenom : 1;
+
+        let c23 = 0, c24 = 0, c23a = 0, c24a = 0, dedFull = 0, dedShared = 0;
+        const pl8Mua = [];
+
+        for (const inv of muaInvs) {
+          if (excludeReplaced.has(inv._fileName)) continue;
+          const cat = invCat[inv._fileName] || (inv.isDeductible === false ? "none" : "full");
+          c23 += inv.subTotal || 0;
+          c24 += inv.totalVAT || 0;
+          if (inv.isImport) { c23a += inv.subTotal || 0; c24a += inv.totalVAT || 0; }
+          if (cat === "full") dedFull += inv.totalVAT || 0;
+          else if (cat === "shared") dedShared += inv.totalVAT || 0;
+
+          if (cat !== "none") {
+            const factor = cat === "shared" ? ratio : 1;
+            if (inv.items && inv.items.length > 0) {
+              for (const item of inv.items) {
+                if (item.vatRate === "8%" && item.baseAmount) {
+                  const baseAmt = Math.round(item.baseAmount * factor);
+                  pl8Mua.push({
+                    ten: item.ten,
+                    hd: inv.invoiceNumber || "",
+                    gtri: baseAmt,
+                    thue: Math.round(baseAmt * 0.08),
+                  });
+                }
+              }
+            } else {
+              for (const vb of (inv.vatBreakdown || [])) {
+                if (String(vb.vatRate).trim() === "8%" && vb.baseAmount) {
+                  const baseAmt = Math.round(vb.baseAmount * factor);
+                  pl8Mua.push({
+                    ten: `Hàng hóa, dịch vụ mua vào 8%`,
+                    hd: inv.invoiceNumber || "",
+                    gtri: baseAmt,
+                    thue: Math.round(baseAmt * 0.08),
+                  });
+                }
+              }
+            }
+          }
+        }
+        const c25 = dedFull + Math.round(dedShared * ratio);
+
+        const c36 = c35 - c25;
+        const X = c36 - v22 + v37 - v38 - v39a;
+        const c40a = X > 0 ? X : 0;
+        const c41  = X < 0 ? -X : 0;
+        const c40  = Math.max(0, c40a - v40b);
+        const c43  = Math.max(0, c41 - v42);
+
+        return {
+          v22, v37, v38, v39a, v40b, v42, ratio, dedShared,
+          c23, c24, c23a, c24a, c25, c26, c27, c28, c29, c30, c31, c32, c32a, c33,
+          c34, c35, c36, c40a, c40, c41, c43,
+          c8base, pl8Mua, pl8Ban,
+        };
+      };
+
+      const executeRealtimeFilter = (parsedData) => {
+        if (!parsedData) return;
+        const muaProc = processInvoiceList(parsedData.rawMua);
+        const banProc = processInvoiceList(parsedData.rawBan);
+
+        const validMua = muaProc.validInvoices;
+        const validBan = banProc.validInvoices;
+        const invalidOther = [...muaProc.invalidOtherPeriodInvoices, ...banProc.invalidOtherPeriodInvoices];
+
+        const autoExclude = new Set([...muaProc.excludeGocSet, ...banProc.excludeGocSet]);
+        setExcludeReplaced(autoExclude);
+
+        const data = { 
+          muaVao: validMua, 
+          banRa: validBan, 
+          invalidOther,
+          replPairs: [...muaProc.replacementPairs, ...banProc.replacementPairs] 
+        };
+        
+        setInvoiceData(data);
+        setFormData(calcFormWith(validMua, validBan, autoExclude));
+      };
+
+      useEffect(() => {
+        if (rawParsedData) {
+          executeRealtimeFilter(rawParsedData);
+        }
+      }, [isMonthMode, selectedQuarter, selectedMonth]);
+
+      const handleProcess = async () => {
+        if (!muaFiles.length && !banFiles.length) { setError("Vui lòng upload ít nhất một hóa đơn"); return; }
+        setError(""); setProcessing(true); setProgress(0);
+        const total = muaFiles.length + banFiles.length; let done = 0;
+        const muaInvs = [], banInvs = [];
+        
+        const readOne = async (f, type) => {
+          if (/\.xml$/i.test(f.name)) {
+            const txt = await readText(f);
+            const inv = parseXMLInvoice(txt, type, f.name);
+            inv._rawContent = txt; inv._rawKind = "xml";
+            return inv;
+          }
+          return null;
+        };
+
+        try {
+          for (const f of muaFiles) { setProcMsg(`Parse & Tách dòng (mua): ${f.name}`); const res = await readOne(f,"mua"); if(res) muaInvs.push(res); done++; setProgress(Math.round(done/total*80)); }
+          for (const f of banFiles) { setProcMsg(`Parse & Tách dòng (bán): ${f.name}`); const res = await readOne(f,"bán"); if(res) banInvs.push(res); done++; setProgress(Math.round(done/total*80)); }
+          
+          setProcMsg("⚙️ Lọc hóa đơn hợp lệ & Khớp HĐ liên quan…"); setProgress(88);
+
+          const parsed = { rawMua: muaInvs, rawBan: banInvs };
+          setRawParsedData(parsed);
+
+          executeRealtimeFilter(parsed);
+
+          setProgress(100); setTab("result");
+        } catch (err) { setError("Lỗi xử lý: " + err.message); }
+        finally { setProcessing(false); setProcMsg(""); setProgress(0); }
+      };
+
+      const TABS = [
+        { id:"guide", label:"📘 Hướng dẫn" },
+        { id:"upload", label:"📤 Upload hóa đơn" },
+        { id:"result", label:"📊 Kết quả & Chi tiết", locked:!formData },
+        { id:"form", label:"🗂 Tờ khai 01/GTGT", locked:!formData },
+        { id:"pl142", label:"🏷️ Phụ lục NQ142", locked:!formData },
+      ];
+
+      return (
+        <div style={{ fontSize: `${baseFontSize}px` }}>
+
+          {toastMsg && (
+            <div style={{ position:"fixed", bottom:20, right:20, zIndex:9999, background:C.navyDark, color:C.goldLight, padding:"10px 18px", borderRadius:8, boxShadow:"0 4px 12px rgba(0,0,0,0.2)", fontSize:`${baseFontSize}px`, fontWeight:600 }}>
+              📋 {toastMsg}
+            </div>
+          )}
+
+          {/* STICKY HEADER TOP BAR - ĐÃ GIỚI HẠN KHUNG GIỚI HẠN TRÁI PHẢI BẰNG CONTAINER DƯỚI (PADDING 0 16PX & MAXWIDTH 1150PX) */}
+          <div style={{ position:"sticky", top:0, zIndex:50, background:`linear-gradient(180deg,${C.navyDark} 0%,${C.navy} 100%)`, color:C.white, boxShadow:"0 2px 10px rgba(0,0,0,0.2)" }}>
+            <div style={{ maxWidth:1150, margin:"0 auto", padding:"0 16px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 0 8px" }}>
+                <div style={{ width:40,height:40,background:C.gold,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>🧾</div>
+                <div>
+                  <div style={{ fontSize:`${baseFontSize + 3}px`,fontWeight:800,letterSpacing:0.3 }}>Kê Khai Thuế GTGT — Mẫu 01/TT80</div>
+                </div>
+                <div style={{ flex:1 }} />
+                
+                {/* Lựa chọn Quý / Tháng */}
+                <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                  <div style={{ display:"flex", alignItems:"center", background:"rgba(255,255,255,0.12)", borderRadius:6, padding:"2px 6px" }}>
+                    <button onClick={() => setBaseFontSize(p => Math.max(11, p - 1))} style={{ background:"transparent", border:"none", color:C.white, fontWeight:800, cursor:"pointer", padding:"2px 6px" }}>A-</button>
+                    <span style={{ fontSize:`${baseFontSize - 1}px`, fontWeight:700, padding:"0 4px", color:C.gold, fontFamily:"monospace" }}>{baseFontSize}px</span>
+                    <button onClick={() => setBaseFontSize(p => Math.min(18, p + 1))} style={{ background:"transparent", border:"none", color:C.white, fontWeight:800, cursor:"pointer", padding:"2px 6px" }}>A+</button>
+                  </div>
+
+                  <div style={{ display:"flex", alignItems:"center", background:"rgba(0,0,0,0.25)", borderRadius:6, padding:"4px 8px", gap:8 }}>
+                    <span style={{ fontSize:`${baseFontSize - 1}px`, fontWeight:700, color: C.gold, minWidth: 42, textAlign: "right", display:"inline-block" }}>
+                      {!isMonthMode ? "Quý" : "Tháng"}
+                    </span>
+                    
+                    <label class="switch">
+                      <input 
+                        type="checkbox" 
+                        checked={isMonthMode} 
+                        onChange={(e) => setIsMonthMode(e.target.checked)} 
+                      />
+                      <span class="slider"></span>
+                    </label>
+
+                    <div style={{ borderLeft:"1px solid rgba(255,255,255,0.2)", paddingLeft:6, marginLeft:2 }}>
+                      {!isMonthMode ? (
+                        <select 
+                          value={selectedQuarter} 
+                          onChange={(e) => setSelectedQuarter(Number(e.target.value))}
+                          style={{ background: C.gold, color: C.navyDark, border: "none", borderRadius: 4, fontWeight: 800, padding: "2px 6px", fontSize: `${baseFontSize - 1}px`, outline: "none", cursor: "pointer", width: 52 }}>
+                          <option value={1}>Q1</option>
+                          <option value={2}>Q2</option>
+                          <option value={3}>Q3</option>
+                          <option value={4}>Q4</option>
+                        </select>
+                      ) : (
+                        <select 
+                          value={selectedMonth} 
+                          onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                          style={{ background: C.gold, color: C.navyDark, border: "none", borderRadius: 4, fontWeight: 800, padding: "2px 6px", fontSize: `${baseFontSize - 1}px`, outline: "none", cursor: "pointer", width: 80 }}>
+                          {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                            <option key={m} value={m}>Tháng {m}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* THANH TABS NAVIGATION CÓ LỀ GIỚI HẠN HOÀN HẢO THEO CARD DƯỚI */}
+              <div style={{ display:"flex",gap:2,alignItems:"center", marginTop:4 }}>
+                {TABS.map(t => (
+                  <button key={t.id} onClick={() => !t.locked && setTab(t.id)}
+                    style={{ padding:"8px 16px",background:tab===t.id?C.gold:"transparent",color:tab===t.id?C.navyDark:(t.locked?"#4a607a":"#b0c8e0"),border:"none",borderBottom:tab===t.id?`3px solid ${C.gold}`:"3px solid transparent",cursor:t.locked?"not-allowed":"pointer",fontSize:`${baseFontSize}px`,fontWeight:tab===t.id?700:400,borderRadius:"6px 6px 0 0",transition:"all 0.15s",whiteSpace:"nowrap" }}>
+                    {t.label}{t.locked?" 🔒":""}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* BODY (CONTAINER CHÍNH ĐỒNG NHẤT MAXWIDTH 1150PX VÀ PADDING 0 16PX) */}
+          <div style={{ maxWidth:1150,margin:"0 auto",padding:"18px 16px" }}>
+
+            {/* GUIDE BANNER */}
+            {tab === "guide" && (
+              <div>
+                <div style={{ background:`linear-gradient(135deg,${C.navy} 0%,${C.navyLight} 100%)`,borderRadius:14,padding:"24px 32px",color:C.white,marginBottom:18 }}>
+                  <div style={{ fontSize:`${baseFontSize + 2}px`,color:C.gold,fontWeight:800,letterSpacing:1,marginBottom:10 }}>
+                    Thuế GTGT • TT80/2021 & Phụ Lục NQ 142/2024/QH15
+                  </div>
+                  <p style={{ color:"#b0cce0",fontSize:`${baseFontSize + 0.5}px`,margin:0,lineHeight:1.6,maxWidth:680 }}>
+                    Upload XML — Tự động bóc tách chi tiết từng dòng mặt hàng có thuế suất 8% lập Phụ phục giảm thuế NQ142, bỏ qua các mặt hàng không thuộc diện giảm thuế.
+                  </p>
+                  <button onClick={() => setTab("upload")} style={{ marginTop:16,background:C.gold,color:C.navyDark,border:"none",borderRadius:8,padding:"9px 22px",fontWeight:800,fontSize:`${baseFontSize + 1}px`,cursor:"pointer" }}>Bắt đầu kê khai →</button>
+                </div>
+              </div>
+            )}
+
+            {/* UPLOAD */}
+            {tab === "upload" && (
+              <div>
+                <div style={{ background:C.goldBg,border:`1px solid ${C.gold}`,borderRadius:8,padding:"9px 14px",marginBottom:14,fontSize:`${baseFontSize - 1}px`,color:C.muted }}>
+                  ⚖️ Đang lập hồ sơ kê khai cho <strong>{getPeriodLabel()}</strong>.
+                </div>
+
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16 }}>
+                  {[
+                    { label:"📥 Hóa đơn MUA VÀO", sub:"Đầu vào — từ nhà cung cấp", type:"mua", files:muaFiles, setFiles:setMuaFiles, drag:dragMua, setDrag:setDragMua, ref:muaRef, color:"#1a3560" },
+                    { label:"📤 Hóa đơn BÁN RA", sub:"Đầu ra — phát hành cho khách", type:"ban", files:banFiles, setFiles:setBanFiles, drag:dragBan, setDrag:setDragBan, ref:banRef, color:"#1e5c30" },
+                  ].map(({ label,sub,type,files,setFiles,drag,setDrag,ref:iref,color }) => (
+                    <div key={type} style={{ background:C.white,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden" }}>
+                      <div style={{ background:color,color:C.white,padding:"10px 16px", textAlign:"center" }}>
+                        <div style={{ fontWeight:700,fontSize:`${baseFontSize + 1}px` }}>{label}</div>
+                        <div style={{ fontSize:`${baseFontSize - 2}px`,color:"#a8c8b0",marginTop:1 }}>{sub}</div>
+                      </div>
+                      <div onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
+                        onDrop={e=>{e.preventDefault();setDrag(false);addFiles(files,e.dataTransfer.files,setFiles);}}
+                        onClick={()=>iref.current.click()}
+                        style={{ margin:10,padding:"20px 14px",border:`2px dashed ${drag?C.gold:C.border}`,background:drag?C.goldBg:"#fafbfd",borderRadius:8,textAlign:"center",cursor:"pointer" }}>
+                        <div style={{ fontSize:24,marginBottom:4 }}>{drag?"✨":"📁"}</div>
+                        <div style={{ fontWeight:600,fontSize:`${baseFontSize}px`,color:C.text }}>Kéo thả hoặc nhấn để chọn file XML</div>
+                        <input ref={iref} type="file" multiple accept=".xml" style={{ display:"none" }} onChange={e=>addFiles(files,e.target.files,setFiles)} />
+                      </div>
+                      {files.length > 0 && (
+                        <div style={{ padding:"0 10px 10px" }}>
+                          <div style={{ fontSize:`${baseFontSize - 2}px`,color:C.muted,fontWeight:600,marginBottom:4 }}>{files.length} FILE ĐÃ CHỌN</div>
+                          {files.map((f,i) => (
+                            <div key={i} style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 8px",background:"#f5f7fb",borderRadius:6,marginBottom:4,fontSize:`${baseFontSize - 1}px` }}>
+                              <span>📄</span>
+                              <span style={{ flex:1,color:C.text,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{f.name}</span>
+                              <button onClick={e=>{e.stopPropagation();setFiles(files.filter((_,j)=>j!==i));}}
+                                style={{ background:C.redBg,color:C.red,border:"none",borderRadius:4,width:18,height:18,cursor:"pointer",fontSize:10 }}>✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {error && <div style={{ background:C.redBg,color:C.red,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:`${baseFontSize}px`,fontWeight:500 }}>⚠️ {error}</div>}
+
+                <button onClick={handleProcess} disabled={processing}
+                  style={{ background:processing?"#8a9ab0":C.navy,color:C.white,border:"none",borderRadius:8,padding:"12px 24px",fontSize:`${baseFontSize + 2}px`,fontWeight:800,cursor:processing?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:10,width:"100%",justifyContent:"center" }}>
+                  {processing ? <><span className="spin">⟳</span><span>{procMsg||"Đang xử lý…"}</span></>
+                    : <><span>🤖</span><span>Xử lý hóa đơn & Tách dòng NQ142</span></>}
+                </button>
+              </div>
+            )}
+
+            {/* RESULT */}
+            {tab === "result" && formData && invoiceData && (() => {
+              const { muaVao, banRa, invalidOther=[], replPairs=[] } = invoiceData;
+              const fd = formData;
+
+              const activeMuaVao = muaVao.filter(inv => !excludeReplaced.has(inv._fileName));
+              const activeBanRa = banRa.filter(inv => !excludeReplaced.has(inv._fileName));
+
+              const InvTable = ({ title, invoices, color, kind }) => {
+                const totalSubTotal = invoices.reduce((sum, item) => sum + (item.subTotal || 0), 0);
+                const totalVAT = invoices.reduce((sum, item) => sum + (item.totalVAT || 0), 0);
+
+                return (
+                  <div style={{ background:C.white,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:16 }}>
+                    <div style={{ background:color, color:C.white, padding:"12px 16px", fontWeight:700, fontSize:`${baseFontSize + 1}px`, textAlign:"center", verticalAlign:"middle" }}>
+                      {title} ({invoices.length} hóa đơn)
+                    </div>
+
+                    <div style={{ overflowX:"auto" }}>
+                      <table style={{ width:"100%",borderCollapse:"collapse",fontSize:`${baseFontSize}px`,tableLayout:"fixed" }}>
+                        <colgroup>
+                          <col style={{ width: "40px" }} />
+                          <col style={{ width: "150px" }} />
+                          <col style={{ width: "90px" }} />
+                          <col style={{ width: "160px" }} />
+                          <col />
+                          <col style={{ width: "120px" }} />
+                          <col style={{ width: "130px" }} />
+                          <col style={{ width: "80px" }} />
+                          <col style={{ width: "130px" }} />
+                        </colgroup>
+                        <thead>
+                          <tr style={{ background:C.section }}>
+                            <th style={{ padding:"8px 4px", textAlign:"center", verticalAlign:"middle", borderBottom:`1px solid ${C.border}` }}>#</th>
+                            <th style={{ padding:"8px 8px", textAlign:"center", verticalAlign:"middle", borderBottom:`1px solid ${C.border}`, whiteSpace:"nowrap" }}>Số HĐ</th>
+                            <th style={{ padding:"8px 8px", textAlign:"center", verticalAlign:"middle", borderBottom:`1px solid ${C.border}`, whiteSpace:"nowrap" }}>Ngày</th>
+                            
+                            <th style={{ padding:"6px 8px", textAlign:"center", verticalAlign:"middle", borderBottom:`1px solid ${C.border}` }}>
+                              <div>Hóa đơn</div>
+                              <div>liên quan</div>
+                            </th>
+
+                            <th style={{ padding:"8px 12px", textAlign:"center", verticalAlign:"middle", borderBottom:`1px solid ${C.border}` }}>Đối tác</th>
+                            <th style={{ padding:"8px 8px", textAlign:"center", verticalAlign:"middle", borderBottom:`1px solid ${C.border}`, whiteSpace:"nowrap" }}>MST</th>
+                            <th style={{ padding:"8px 12px", textAlign:"center", verticalAlign:"middle", borderBottom:`1px solid ${C.border}`, whiteSpace:"nowrap" }}>Tiền hàng (đ)</th>
+                            <th style={{ padding:"8px 4px", textAlign:"center", verticalAlign:"middle", borderBottom:`1px solid ${C.border}`, whiteSpace:"nowrap" }}>Thuế suất</th>
+                            <th style={{ padding:"8px 12px", textAlign:"center", verticalAlign:"middle", borderBottom:`1px solid ${C.border}`, whiteSpace:"nowrap" }}>Thuế GTGT (đ)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoices.map((inv,i) => {
+                            const partner = kind==="mua" ? inv.sellerName : inv.buyerName;
+                            const mst = kind==="mua" ? inv.sellerTaxCode : inv.buyerTaxCode;
+                            const rateDisplay = (inv.vatBreakdown || []).map(v => v.vatRate).filter(Boolean).join(", ") || "0%";
+
+                            return (
+                              <tr key={i} style={{ borderBottom:`1px solid ${C.border}`,background: i%2===0 ? C.white : "#fafbfc" }}>
+                                <td style={{ padding:"8px 4px",textAlign:"center" }}>{i+1}</td>
+                                
+                                <td style={{ padding:"8px 8px",fontFamily:"monospace",color:color,fontWeight:600, whiteSpace:"nowrap", textAlign:"center" }}>
+                                  <div>{inv.khHieu || "-"}</div>
+                                  <div style={{ color:C.text, fontSize:`${baseFontSize - 1}px` }}>{inv.soHD || "-"}</div>
+                                </td>
+
+                                <td style={{ padding:"8px 8px", textAlign:"center", whiteSpace:"nowrap" }}>{inv.invoiceDate||"—"}</td>
+                                
+                                <td style={{ padding:"8px 8px", textAlign:"center", fontFamily:"monospace", fontSize:`${baseFontSize - 1}px`, whiteSpace:"nowrap" }}>
+                                  {inv.relNum ? (
+                                    <span style={{ background: inv.relType==="thaythe" ? C.redBg : C.amberBg, color: inv.relType==="thaythe" ? C.red : C.amber, padding:"2px 6px", borderRadius:4, fontWeight:600, display:"inline-block" }}>
+                                      <div>{inv.relType==="thaythe" ? "🔄 " : "✏️ "}{inv.relKey || "-"}</div>
+                                      <div>{inv.relNum}</div>
+                                    </span>
+                                  ) : (
+                                    <span style={{ color:C.muted }}>-</span>
+                                  )}
+                                </td>
+
+                                <td style={{ padding:"8px 12px", wordBreak:"break-word" }} title={partner}>{partner||"—"}</td>
+                                <td style={{ padding:"8px 8px",fontFamily:"monospace",fontSize:`${baseFontSize - 1}px`, textAlign:"center", whiteSpace:"nowrap" }}>{mst||"—"}</td>
+                                <td className="clickable-num" onClick={() => handleCopy(inv.subTotal)} style={{ padding:"8px 12px",textAlign:"right",fontFamily:"monospace", whiteSpace:"nowrap" }}>
+                                  {inv.subTotal === 0 ? "-" : VND(inv.subTotal)}
+                                </td>
+                                <td style={{ padding:"8px 4px",textAlign:"center",fontWeight:700,color:C.navy, whiteSpace:"nowrap" }}>{rateDisplay}</td>
+                                <td className="clickable-num" onClick={() => handleCopy(inv.totalVAT)} style={{ padding:"8px 12px",textAlign:"right",fontFamily:"monospace", whiteSpace:"nowrap" }}>
+                                  {inv.totalVAT === 0 ? "-" : VND(inv.totalVAT)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        
+                        <tfoot>
+                          <tr style={{ background:C.total, fontWeight:800, borderTop:`2px solid ${C.navyLight}` }}>
+                            <td colSpan={6} style={{ padding:"10px 12px", textAlign:"right", color:C.navy }}>Tổng cộng ({title}):</td>
+                            <td className="clickable-num" onClick={() => handleCopy(totalSubTotal)} style={{ padding:"10px 12px", textAlign:"right", fontFamily:"monospace", color:C.navy }}>
+                              {totalSubTotal === 0 ? "-" : VND(totalSubTotal)}
+                            </td>
+                            <td></td>
+                            <td className="clickable-num" onClick={() => handleCopy(totalVAT)} style={{ padding:"10px 12px", textAlign:"right", fontFamily:"monospace", color:C.navy }}>
+                              {totalVAT === 0 ? "-" : VND(totalVAT)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                );
+              };
+
+              return (
+                <div>
+                  
+                  {/* BOX THỐNG KÊ 4 Ô - NẰM TRÊN CÙNG BÊN DƯỚI TOP BAR */}
+                  <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16 }}>
+                    {[
+                      { label:"Hóa đơn mua vào", val:activeMuaVao.length, unit:"file", border:"#2a4a7f", color: C.red },
+                      { label:"Hóa đơn bán ra", val:activeBanRa.length, unit:"file", icon:"📤", border:"#1e5c30", color: C.green },
+                      { label:"Thuế phải nộp [40]", val:fd.c40, isMoney:true, unit:"đồng", border:fd.c40>0?C.red:"#9ca3af", color:fd.c40>0?C.red:undefined },
+                      { 
+                        label:"Chuyển kỳ sau [43]", 
+                        val:fd.c43, 
+                        isMoney:true, 
+                        unit:"đồng", 
+                        border:fd.c43!==0?(fd.c43>0?C.green:C.red):"#9ca3af", 
+                        isCustomSize43: true,
+                        color: fd.c43 > 0 ? C.green : (fd.c43 < 0 ? C.red : undefined) 
+                      },
+                    ].map((s,i) => (
+                      <div 
+                        key={i} 
+                        style={{ 
+                          background: C.white, 
+                          borderRadius: 10, 
+                          padding: "16px", 
+                          border: `1px solid ${C.border}`, 
+                          borderLeft: `4px solid ${s.border}`, 
+                          textAlign: "center",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          minHeight: "100px"
+                        }}>
+                        <div 
+                          className={s.isMoney ? "clickable-num" : ""} 
+                          onClick={() => s.isMoney && handleCopy(s.val)} 
+                          style={{ 
+                            fontSize: s.isCustomSize43 ? `${(baseFontSize + 6) * 2 * 0.7}px` : `${(baseFontSize + 6) * 2}px`, 
+                            fontWeight: 800, 
+                            color: s.color || C.text, 
+                            lineHeight: 1.1,
+                            textAlign: "center"
+                          }}>
+                          {s.isMoney ? (s.val === 0 ? "-" : VND(s.val)) : s.val}
+                        </div>
+                        <div style={{ fontSize:`${baseFontSize}px`, color:C.muted, marginTop:6, fontWeight:600, textAlign:"center" }}>
+                          {s.label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Ô THÔNG BÁO 1: Hóa đơn bị thay thế */}
+                  {replPairs.length > 0 && (
+                    <div style={{ background:"#eef4ff", border:`1px solid ${C.navyLight}`, borderRadius:10, padding:"12px 16px", marginBottom:12 }}>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+                        <div style={{ fontWeight:800, fontSize:`${baseFontSize + 1}px`, color:C.navy, flex:1 }}>
+                          🔄 Phát hiện {replPairs.length} hóa đơn bị thay thế (đã loại bỏ khỏi kê khai)
+                        </div>
+                        <button 
+                          onClick={() => setShowReplacedDetails(p => !p)} 
+                          style={{ background:"transparent", border:"none", fontSize:`${baseFontSize - 1}px`, color:C.navyLight, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+                          {showReplacedDetails ? "▲ Thu gọn" : "▼ Xem chi tiết danh sách"}
+                        </button>
+                      </div>
+
+                      {showReplacedDetails && (
+                        <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}` }}>
+                          {replPairs.map((p, i) => (
+                            <div key={i} style={{ padding:"6px 10px", background:C.white, borderRadius:6, marginBottom:6, border:`1px solid ${C.border}`, fontSize:`${baseFontSize - 1}px` }}>
+                              <span style={{ color:C.red, textDecoration:"line-through", fontWeight:600 }}>HĐ Gốc bị thay thế: {p.goc.invoiceNumber} ({p.goc.invoiceDate})</span>
+                              <span style={{ margin:"0 8px", color:C.muted }}>➔ Thay bởi ➔</span>
+                              <span style={{ color:C.green, fontWeight:700 }}>HĐ Thay thế mới: {p.thayThe.invoiceNumber} ({p.thayThe.invoiceDate})</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Ô THÔNG BÁO 2 */}
+                  {invalidOther.length > 0 && (
+                    <div style={{ background:C.redBg, border:`1px solid ${C.red}`, borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+                        <div style={{ fontWeight:800, fontSize:`${baseFontSize + 1}px`, color:C.red, flex:1 }}>
+                          ⚠️ Bỏ qua {invalidOther.length} hóa đơn phát sinh và không có thông tin liên quan đến hóa đơn gốc thuộc kỳ kê khai hiện tại.
+                        </div>
+                        <button 
+                          onClick={() => setShowInvalidDetails(p => !p)} 
+                          style={{ background:"transparent", border:"none", fontSize:`${baseFontSize - 1}px`, color:C.red, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+                          {showInvalidDetails ? "▲ Thu gọn" : "▼ Xem chi tiết danh sách"}
+                        </button>
+                      </div>
+
+                      {showInvalidDetails && (
+                        <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid #fca5a5` }}>
+                          <div style={{ fontSize:`${baseFontSize - 1}px`, color:C.text, marginBottom:8 }}>
+                            Danh sách các hóa đơn ngoài kỳ bị loại bỏ không kê khai vào {getPeriodLabel()}:
+                          </div>
+                          {invalidOther.map((inv, i) => (
+                            <div key={i} style={{ padding:"6px 10px", background:C.white, borderRadius:6, marginBottom:4, border:`1px solid ${C.border}`, fontSize:`${baseFontSize - 1}px`, display:"flex", justifyContent:"space-between" }}>
+                              <span style={{ fontWeight:600 }}>HĐ: {inv.invoiceNumber} (Ngày: {inv.invoiceDate}) - Đối tác: {inv.sellerName || inv.buyerName}</span>
+                              <span style={{ color:C.red, fontStyle:"italic" }}>Lý do: Không thuộc kỳ & không có HĐ gốc trong kỳ</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeMuaVao.length > 0 && <InvTable title="Hóa đơn Mua vào" invoices={activeMuaVao} color="#1a3560" kind="mua" />}
+                  {activeBanRa.length > 0 && <InvTable title="Hóa đơn Bán ra" invoices={activeBanRa} color="#1e5c30" kind="ban" />}
+
+                  <button onClick={() => setTab("form")} style={{ marginTop:6,background:C.navy,color:C.white,border:"none",borderRadius:8,padding:"10px 20px",fontWeight:800,fontSize:`${baseFontSize + 1}px`,cursor:"pointer" }}>🗂 Xem Tờ khai 01/GTGT đầy đủ →</button>
+                </div>
+              );
+            })()}
+
+            {/* FORM TỜ KHAI CHÍNH */}
+            {tab === "form" && formData && (() => {
+              const fd = formData;
+              const isNop = fd.c40 > 0;
+              const isKT = fd.c43 > 0;
+
+              const cell = { padding:"8px 10px", fontSize:`${baseFontSize}px`, borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}` };
+              const codeBox = (num) => (num ? <span style={{ background:C.navyDark,color:C.gold,fontSize:`${baseFontSize - 3}px`,fontWeight:900,borderRadius:3,padding:"1px 5px",fontFamily:"monospace" }}>[{num}]</span> : null);
+              
+              const Row = ({ stt, label, codeA, vA, codeB, vB, total, calc, indent }) => {
+                const bg = total ? C.total : calc ? "#f0f5ff" : C.white;
+                const fw = total ? 700 : 400;
+                return (
+                  <tr style={{ background:bg }}>
+                    <td style={{ ...cell, textAlign:"center", color:C.muted, fontWeight:600, width:34 }}>{stt||""}</td>
+                    <td style={{ ...cell, paddingLeft:indent?24:10, color:C.text, fontWeight:fw }}>{label}</td>
+                    <td style={{ ...cell, textAlign:"center", width:44 }}>{codeBox(codeA)}</td>
+                    <td className={vA !== undefined ? "clickable-num" : ""} onClick={() => vA !== undefined && handleCopy(vA)} style={{ ...cell, textAlign:"right", fontFamily:"monospace", fontWeight:fw, color:vA>0?C.text:C.muted, width:150 }}>
+                      {vA!==undefined ? (vA === 0 ? "-" : VND(vA)) : ""}
+                    </td>
+                    <td style={{ ...cell, textAlign:"center", width:44 }}>{codeBox(codeB)}</td>
+                    <td className={vB !== undefined ? "clickable-num" : ""} onClick={() => vB !== undefined && handleCopy(vB)} style={{ ...cell, borderRight:"none", textAlign:"right", fontFamily:"monospace", fontWeight:fw, color:vB>0?(total?C.navy:C.text):C.muted, width:150 }}>
+                      {vB!==undefined ? (vB === 0 ? "-" : VND(vB)) : ""}
+                    </td>
+                  </tr>
+                );
+              };
+
+              const Sec = ({ stt, title }) => (
+                <tr>
+                  <td style={{ background:C.section, color:C.navy, padding:"8px 10px", fontWeight:800, fontSize:`${baseFontSize}px`, textAlign:"center", borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}` }}>{stt}</td>
+                  <td colSpan={5} style={{ background:C.section, color:C.navy, padding:"8px 10px", fontWeight:800, fontSize:`${baseFontSize}px`, borderBottom:`1px solid ${C.border}` }}>{title}</td>
+                </tr>
+              );
+
+              return (
+                <div>
+                  <div style={{ background:C.white,borderRadius:10,border:`1px solid ${C.border}`,padding:"16px 20px",marginBottom:14,textAlign:"center" }}>
+                    <div style={{ fontSize:`${baseFontSize + 5}px`,fontWeight:900,color:C.navy }}>TỜ KHAI THUẾ GIÁ TRỊ GIA TĂNG</div>
+                    <div style={{ fontSize:`${baseFontSize - 1}px`,color:C.muted,marginTop:2 }}>Mẫu số 01/GTGT — TT80/2021/TT-BTC (Kỳ kê khai: {getPeriodLabel()})</div>
+                  </div>
+
+                  <div style={{ background:C.white,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:16 }}>
+                    <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%",borderCollapse:"collapse",minWidth:720 }}>
+                      <thead>
+                        <tr style={{ background:C.navyDark }}>
+                          <th style={{ padding:"8px",color:C.white,textAlign:"center",fontSize:`${baseFontSize - 1}px`,fontWeight:700,width:34 }}>STT</th>
+                          <th style={{ padding:"8px 10px",color:C.white,textAlign:"center",fontSize:`${baseFontSize}px`,fontWeight:700 }}>Chỉ tiêu</th>
+                          <th colSpan={2} style={{ padding:"8px 10px",color:C.gold,textAlign:"center",fontSize:`${baseFontSize - 1}px`,fontWeight:700 }}>Giá trị HHDV (chưa thuế)</th>
+                          <th colSpan={2} style={{ padding:"8px 10px",color:C.gold,textAlign:"center",fontSize:`${baseFontSize - 1}px`,fontWeight:700 }}>Thuế GTGT</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <Row stt="A" label="Không phát sinh hoạt động mua, bán trong kỳ" codeB="21" vB={undefined} />
+                        <Row stt="B" label="Thuế GTGT còn được khấu trừ kỳ trước chuyển sang" codeB="22" vB={fd.v22} />
+                        <tr><td colSpan={6} style={{ padding:"8px 10px", fontSize:`${baseFontSize}px`, fontWeight:700, color:C.text, background:"#fafbfd", borderBottom:`1px solid ${C.border}` }}>C  Kê khai thuế GTGT phải nộp ngân sách nhà nước</td></tr>
+
+                        <Sec stt="I" title="Hàng hóa, dịch vụ mua vào trong kỳ" />
+                        <Row stt="1" label="Giá trị và thuế GTGT của hàng hóa, dịch vụ mua vào" codeA="23" vA={fd.c23} codeB="24" vB={fd.c24} />
+                        <Row label="Trong đó: hàng hóa, dịch vụ nhập khẩu" codeA="23a" vA={fd.c23a} codeB="24a" vB={fd.c24a} indent />
+                        <Row stt="2" label="Thuế GTGT của HHDV mua vào được khấu trừ kỳ này" codeB="25" vB={fd.c25} total />
+
+                        <Sec stt="II" title="Hàng hóa, dịch vụ bán ra trong kỳ" />
+                        <Row stt="1" label="Hàng hóa, dịch vụ bán ra không chịu thuế GTGT" codeA="26" vA={fd.c26} />
+                        <Row stt="2" label="HHDV bán ra chịu thuế GTGT ([27]=[29]+[30]+[32]+[32a]; [28]=[31]+[33])" codeA="27" vA={fd.c27} codeB="28" vB={fd.c28} calc />
+                        <Row stt="a" label="Hàng hóa, dịch vụ bán ra chịu thuế suất 0%" codeA="29" vA={fd.c29} indent />
+                        <Row stt="b" label="Hàng hóa, dịch vụ bán ra chịu thuế suất 5%" codeA="30" vA={fd.c30} codeB="31" vB={fd.c31} indent />
+                        <Row stt="c" label="Hàng hóa, dịch vụ bán ra chịu thuế suất 10%" codeA="32" vA={fd.c32} codeB="33" vB={fd.c33} indent />
+                        <Row stt="d" label="Hàng hóa, dịch vụ bán ra không tính thuế" codeA="32a" vA={fd.c32a} indent />
+                        <Row stt="3" label="Tổng doanh thu và thuế GTGT của HHDV bán ra ([34]=[26]+[27]; [35]=[28])" codeA="34" vA={fd.c34} codeB="35" vB={fd.c35} total />
+
+                        <Sec stt="III" title="Thuế GTGT phát sinh trong kỳ ([36]=[35]−[25])" />
+                        <Row label="Thuế GTGT phát sinh trong kỳ" codeB="36" vB={fd.c36} calc />
+
+                        <Sec stt="IV" title="Điều chỉnh tăng, giảm thuế GTGT còn được khấu trừ của các kỳ trước" />
+                        <Row stt="1" label="Điều chỉnh giảm" codeB="37" vB={fd.v37} indent />
+                        <Row stt="2" label="Điều chỉnh tăng" codeB="38" vB={fd.v38} indent />
+
+                        <Sec stt="V" title="Thuế GTGT nhận bàn giao được khấu trừ trong kỳ" />
+                        <Row label="Thuế GTGT nhận bàn giao được khấu trừ trong kỳ" codeB="39a" vB={fd.v39a} />
+
+                        <Sec stt="VI" title="Xác định nghĩa vụ thuế GTGT phải nộp trong kỳ" />
+                        <Row stt="1" label="Thuế GTGT phải nộp của HĐ SXKD trong kỳ" codeB="40a" vB={fd.c40a} />
+                        <Row stt="2" label="Thuế GTGT mua vào của dự án đầu tư được bù trừ" codeB="40b" vB={fd.v40b} />
+                        <Row stt="3" label="Thuế GTGT còn phải nộp trong kỳ ([40]=[40a]−[40b])" codeB="40" vB={fd.c40} total={isNop} />
+                        <Row stt="4" label="Thuế GTGT chưa khấu trừ hết kỳ này" codeB="41" vB={fd.c41} />
+                        <Row stt="4.1" label="Thuế GTGT đề nghị hoàn" codeB="42" vB={fd.v42} indent />
+                        <Row stt="4.2" label="Thuế GTGT còn được khấu trừ chuyển kỳ sau ([43]=[41]−[42])" codeB="43" vB={fd.c43} total={isKT} />
+                      </tbody>
+                    </table>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* TAB PHỤ LỤC 142 ĐỘC LẬP TÁCH BIỆT */}
+            {tab === "pl142" && formData && (() => {
+              const fd = formData;
+              return (
+                <div style={{ background:C.white,borderRadius:10,border:`1px solid ${C.navyLight}`,overflow:"hidden",marginBottom:16 }}>
+                  <div style={{ padding:"20px 24px" }}>
+                    <div style={{ textAlign:"center", fontWeight:800, fontSize:`${baseFontSize + 3}px`, textTransform:"uppercase", color:C.text }}>
+                      PL 142/2024/QH15 - 174/2024/QH15 - 204/2025/QH15
+                    </div>
+                    <div style={{ textAlign:"center", fontStyle:"italic", fontSize:`${baseFontSize - 1}px`, color:C.muted, marginBottom:20 }}>
+                      (Kèm theo Tờ khai thuế GTGT kỳ tính thuế: {getPeriodLabel()})
+                    </div>
+
+                    <div style={{ fontWeight:700, fontSize:`${baseFontSize}px`, color:C.text, marginBottom:8 }}>
+                      I. Hàng hóa, dịch vụ mua vào trong kỳ được áp dụng mức thuế suất thuế giá trị gia tăng 8% (áp dụng cho người nộp thuế kê khai theo phương pháp khấu trừ thuế)
+                    </div>
+                    
+                    <div style={{ overflowX:"auto", marginBottom:24 }}>
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:`${baseFontSize}px`, border:`1px solid ${C.border}` }}>
+                        <thead>
+                          <tr style={{ background:"#0066b2", color:C.white }}>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center", width:60 }}>STT</th>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center" }}>Tên hàng hóa, dịch vụ</th>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center", width:"30%" }}>
+                              Giá trị hàng hóa, dịch vụ mua vào chưa có thuế GTGT được khấu trừ trong kỳ
+                            </th>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center", width:"30%" }}>
+                              Thuế GTGT của hàng hóa, dịch vụ mua vào được khấu trừ trong kỳ
+                            </th>
+                          </tr>
+                          <tr style={{ background:"#f0f4f8", color:C.text, fontSize:`${baseFontSize - 1}px` }}>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(1)</td>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(2)</td>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(3)</td>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(4)</td>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {fd.pl8Mua.length > 0 ? (
+                            fd.pl8Mua.map((r, i) => (
+                              <tr key={i} style={{ background: i%2===0 ? C.white : "#fafbfc" }}>
+                                <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"center" }}>{i+1}</td>
+                                <td style={{ padding:"6px 8px", border:`1px solid ${C.border}` }}>{r.ten}</td>
+                                <td className="clickable-num" onClick={() => handleCopy(r.gtri)} style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"right", fontFamily:"monospace" }}>
+                                  {r.gtri === 0 ? "-" : VND(r.gtri)}
+                                </td>
+                                <td className="clickable-num" onClick={() => handleCopy(r.thue)} style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"right", fontFamily:"monospace" }}>
+                                  {r.thue === 0 ? "-" : VND(r.thue)}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"center" }}>1</td>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}` }}></td>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"right" }}>-</td>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"right" }}>-</td>
+                            </tr>
+                          )}
+                          <tr style={{ background:"#e6f0fa", fontWeight:700 }}>
+                            <td colSpan={2} style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center" }}>Tổng cộng</td>
+                            <td style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"right", fontFamily:"monospace" }}>
+                              {VND(fd.pl8Mua.reduce((s,x)=>s+x.gtri,0))}
+                            </td>
+                            <td style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"right", fontFamily:"monospace" }}>
+                              {VND(fd.pl8Mua.reduce((s,x)=>s+x.thue,0))}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div style={{ fontWeight:700, fontSize:`${baseFontSize}px`, color:C.text, marginBottom:8 }}>
+                      II. Hàng hóa, dịch vụ bán ra trong kỳ
+                    </div>
+
+                    <div style={{ overflowX:"auto" }}>
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:`${baseFontSize}px`, border:`1px solid ${C.border}` }}>
+                        <thead>
+                          <tr style={{ background:"#0066b2", color:C.white }}>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center", width:50 }}>STT</th>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center" }}>Tên hàng hóa, dịch vụ</th>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center", width:180 }}>
+                              Giá trị HHDV chưa có thuế GTGT
+                            </th>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center", width:110 }}>
+                              Thuế suất thuế GTGT theo quy định
+                            </th>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center", width:120 }}>
+                              Thuế suất thuế GTGT sau giảm
+                            </th>
+                            <th style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center", width:180 }}>
+                              Thuế GTGT của hàng hóa, dịch vụ bán ra được giảm
+                            </th>
+                          </tr>
+                          <tr style={{ background:"#f0f4f8", color:C.text, fontSize:`${baseFontSize - 1}px` }}>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(1)</td>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(2)</td>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(3)</td>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(4)</td>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(5)=(4)x80%</td>
+                            <td style={{ border:`1px solid ${C.border}`, textAlign:"center" }}>(6)=(3)x[(4)-(5)]</td>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {fd.pl8Ban.length > 0 ? (
+                            fd.pl8Ban.map((r, i) => (
+                              <tr key={i} style={{ background: i%2===0 ? C.white : "#fafbfc" }}>
+                                <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"center" }}>{i+1}</td>
+                                <td style={{ padding:"6px 8px", border:`1px solid ${C.border}` }}>{r.ten}</td>
+                                <td className="clickable-num" onClick={() => handleCopy(r.gtri)} style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"right", fontFamily:"monospace" }}>
+                                  {r.gtri === 0 ? "-" : VND(r.gtri)}
+                                </td>
+                                <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"center" }}>10%</td>
+                                <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"center" }}>8%</td>
+                                <td className="clickable-num" onClick={() => handleCopy(r.duocGiam)} style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"right", fontFamily:"monospace" }}>
+                                  {r.duocGiam === 0 ? "-" : VND(r.duocGiam)}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"center" }}>1</td>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}` }}></td>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"right" }}>-</td>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"center" }}>10%</td>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"center" }}>8%</td>
+                              <td style={{ padding:"6px 8px", border:`1px solid ${C.border}`, textAlign:"right" }}>-</td>
+                            </tr>
+                          )}
+                          <tr style={{ background:"#e6f0fa", fontWeight:700 }}>
+                            <td colSpan={2} style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"center" }}>Tổng cộng</td>
+                            <td style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"right", fontFamily:"monospace" }}>
+                              {VND(fd.pl8Ban.reduce((s,x)=>s+x.gtri,0))}
+                            </td>
+                            <td colSpan={2} style={{ border:`1px solid ${C.border}` }}></td>
+                            <td style={{ padding:"8px", border:`1px solid ${C.border}`, textAlign:"right", fontFamily:"monospace" }}>
+                              {VND(fd.pl8Ban.reduce((s,x)=>s+x.duocGiam,0))}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                  </div>
+                </div>
+              );
+            })()}
+
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
