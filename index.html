@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>App Store Hub</title>
-    <link rel="manifest" href="manifest.json">
+    <title>Office App Store</title>
     <style>
         * {
             box-sizing: border-box;
@@ -39,21 +38,6 @@
             font-size: 14px;
             color: #86868b;
             margin-top: 6px;
-        }
-
-        /* Nút Cài Đặt App Store về Màn hình chính */
-        .pwa-install-btn {
-            background-color: #0071e3;
-            color: #ffffff;
-            font-size: 14px;
-            font-weight: 500;
-            padding: 10px 20px;
-            border-radius: 980px;
-            border: none;
-            cursor: pointer;
-            margin-top: 16px;
-            display: none;
-            box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);
         }
 
         .store-grid {
@@ -96,23 +80,38 @@
             box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
         }
 
-        .app-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-        .app-desc { font-size: 12px; color: #86868b; margin-bottom: 16px; line-height: 1.4; flex-grow: 1; }
+        .app-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            text-transform: capitalize;
+        }
+
+        .app-desc {
+            font-size: 12px;
+            color: #86868b;
+            margin-bottom: 16px;
+            line-height: 1.4;
+            flex-grow: 1;
+        }
 
         .btn-get {
             background-color: #f1f1f6;
             color: #0071e3;
             font-size: 13px;
             font-weight: 600;
-            padding: 6px 18px;
+            padding: 8px 20px;
             border-radius: 980px;
             text-decoration: none;
             transition: background-color 0.2s;
         }
 
-        .btn-get:hover { background-color: #e5e5ea; }
+        .btn-get:hover {
+            background-color: #0071e3;
+            color: #ffffff;
+        }
 
-        .loading-spinner {
+        .status {
             font-size: 14px;
             color: #86868b;
         }
@@ -121,94 +120,77 @@
 <body>
 
     <div class="header">
-        <h1>Cloud App Store</h1>
-        <p>Live synced with OneDrive</p>
-        <button class="pwa-install-btn" id="installPwaBtn">📲 Add App Store to Home Screen</button>
+        <h1>Office App Store</h1>
+        <p>Automatically synced with GitHub Repository</p>
     </div>
 
-    <div id="loading" class="loading-spinner">Scanning OneDrive for apps...</div>
+    <div id="status" class="status">Scanning /apps folder...</div>
     <div class="store-grid" id="storeGrid"></div>
 
     <script>
-        // Đường dẫn Share API OneDrive của bạn
-        const ONEDRIVE_SHARE_URL = "https://1drv.ms/f/c/3eac0f6026f6989d/IgCCJEOPRq5UQJTEZzsg9mhYAehJFT0z5zRABX8xmkL_MjM?e=G4S7Xb";
+        // Cấu hình Username và Repo GitHub của bạn
+        const GITHUB_USER = "THANHALEN";
+        const GITHUB_REPO = "office";
 
-        async function fetchOneDriveApps() {
+        async function autoScanApps() {
             const grid = document.getElementById('storeGrid');
-            const loading = document.getElementById('loading');
+            const status = document.getElementById('status');
 
             try {
-                // Mã hóa link share sang định dạng base64 chuẩn Microsoft Graph
-                const base64Value = btoa(ONEDRIVE_SHARE_URL).replace(/=/g, '').replace(/\//g, '_').replace(/\+/g, '-');
-                const apiUrl = `https://api.graph.microsoft.com/v1.0/shares/u!${base64Value}/driveItem/children`;
-
+                // Tự động gọi GitHub API quét thư mục /apps
+                const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/apps`;
                 const response = await fetch(apiUrl);
-                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error("Folder '/apps' not found or empty.");
+                }
 
-                loading.style.display = 'none';
+                const files = await response.json();
+                
+                // Lọc lấy các file HTML trong thư mục apps
+                const htmlFiles = files.filter(f => f.name.endsWith('.html'));
 
-                if (!data.value) {
-                    loading.innerText = "No apps found on OneDrive.";
-                    loading.style.display = 'block';
+                status.style.display = 'none';
+
+                if (htmlFiles.length === 0) {
+                    status.innerText = "No .html apps found in /apps folder.";
+                    status.style.display = 'block';
                     return;
                 }
 
-                // Lọc chỉ lấy các file có đuôi .html
-                const htmlFiles = data.value.filter(file => file.name.endsWith('.html'));
+                // Màu gradient ngẫu nhiên cho icon app thêm sinh động
+                const gradients = [
+                    "linear-gradient(135deg, #0071e3, #42a5f5)",
+                    "linear-gradient(135deg, #ff9500, #ffcc00)",
+                    "linear-gradient(135deg, #34c759, #30b0c7)",
+                    "linear-gradient(135deg, #af52de, #ff2d55)",
+                    "linear-gradient(135deg, #5856d6, #32ade6)"
+                ];
 
-                for (const file of htmlFiles) {
-                    // Tải nội dung từng file HTML để đọc Thẻ Metadata
-                    const downloadUrl = file["@microsoft.graph.downloadUrl"];
-                    const htmlText = await fetch(downloadUrl).then(res => res.text());
+                htmlFiles.forEach((file, index) => {
+                    // Tự động làm sạch tên file để đặt làm tiêu đề (VD: html-creator.html -> Html Creator)
+                    const appName = file.name.replace('.html', '').replace(/[-_]/g, ' ');
+                    const appUrl = `./apps/${file.name}`;
+                    const bg = gradients[index % gradients.length];
 
-                    // Trích xuất metadata bằng DOMParser
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(htmlText, 'text/html');
-
-                    const title = doc.querySelector('meta[name="app-title"]')?.content || file.name.replace('.html', '');
-                    const icon = doc.querySelector('meta[name="app-icon"]')?.content || '📱';
-                    const desc = doc.querySelector('meta[name="app-desc"]')?.content || 'OneDrive Web Application';
-                    const bg = doc.querySelector('meta[name="app-bg"]')?.content || 'linear-gradient(135deg, #0071e3, #42a5f5)';
-
-                    // Dựng App Card ra màn hình Store
                     const card = document.createElement('div');
                     card.className = 'app-card';
                     card.innerHTML = `
-                        <div class="app-icon" style="background: ${bg}">${icon}</div>
-                        <div class="app-title">${title}</div>
-                        <div class="app-desc">${desc}</div>
-                        <a href="${downloadUrl}" target="_blank" class="btn-get">OPEN / ADD</a>
+                        <div class="app-icon" style="background: ${bg}">⚡</div>
+                        <div class="app-title">${appName}</div>
+                        <div class="app-desc">Web Utility App</div>
+                        <a href="${appUrl}" target="_blank" class="btn-get">OPEN</a>
                     `;
                     grid.appendChild(card);
-                }
+                });
+
             } catch (err) {
                 console.error(err);
-                loading.innerText = "Error scanning OneDrive. Please check folder share link.";
+                status.innerText = "Please create an '/apps' folder in your repository and upload .html files there.";
             }
         }
 
-        fetchOneDriveApps();
-
-        // Xử lý sự kiện "Add to Home Screen"
-        let deferredPrompt;
-        const installBtn = document.getElementById('installPwaBtn');
-
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            installBtn.style.display = 'inline-block';
-        });
-
-        installBtn.addEventListener('click', async () => {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    installBtn.style.display = 'none';
-                }
-                deferredPrompt = null;
-            }
-        });
+        autoScanApps();
     </script>
 </body>
 </html>
