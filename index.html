@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Unshuffle</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: #f5f5f7;
+            color: #1d1d1f;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            width: 100%;
+            max-width: 440px;
+            padding: 48px 36px 40px 36px;
+            text-align: center;
+        }
+
+        .app-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #0071e3 0%, #42a5f5 100%);
+            border-radius: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 16px rgba(0, 113, 227, 0.2);
+        }
+
+        .app-icon svg {
+            width: 32px;
+            height: 32px;
+            fill: #ffffff;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: #1d1d1f;
+            margin-bottom: 8px;
+        }
+
+        p.subtitle {
+            font-size: 14px;
+            font-weight: 400;
+            color: #86868b;
+            margin-bottom: 32px;
+            letter-spacing: -0.01em;
+        }
+
+        .drop-zone {
+            border: 1.5px dashed #d2d2d7;
+            border-radius: 18px;
+            padding: 36px 20px;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            background-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #0071e3;
+            background-color: rgba(0, 113, 227, 0.03);
+            transform: scale(1.01);
+        }
+
+        .drop-text {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+
+        .drop-subtext {
+            font-size: 12px;
+            color: #86868b;
+            margin-top: 4px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .status-badge {
+            margin-top: 20px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            display: none;
+            text-align: center;
+            letter-spacing: -0.01em;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .status-badge.info { background: #e8f2ff; color: #0071e3; }
+        .status-badge.success { background: #eaf7ed; color: #1d873b; }
+        .status-badge.error { background: #fde8e8; color: #e53935; }
+
+        .btn-action {
+            background-color: #0071e3;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 500;
+            padding: 14px 24px;
+            border-radius: 980px;
+            border: none;
+            cursor: pointer;
+            margin-top: 24px;
+            width: 100%;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: none;
+            box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);
+        }
+
+        .btn-action:hover {
+            background-color: #0077ed;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(0, 113, 227, 0.35);
+        }
+
+        .btn-action:disabled {
+            background-color: #d2d2d7;
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .privacy-tag {
+            margin-top: 32px;
+            font-size: 12px;
+            color: #86868b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .privacy-tag svg {
+            width: 13px;
+            height: 13px;
+            fill: #86868b;
+        }
+    </style>
+
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+
+    <div class="card">
+        <div class="app-icon">
+            <svg viewBox="0 0 24 24">
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+            </svg>
+        </div>
+
+        <h1>PDF Unshuffle</h1>
+        <p class="subtitle">Auto-interleave duplex scanned documents</p>
+
+        <div class="drop-zone" id="dropZone">
+            <div class="drop-text" id="dropText">Drop PDF file here</div>
+            <div class="drop-subtext">or click to browse</div>
+            <input type="file" id="fileInput" accept="application/pdf">
+        </div>
+
+        <div class="status-badge" id="statusBadge"></div>
+
+        <button class="btn-action" id="processBtn">Process & Download</button>
+
+        <div class="privacy-tag">
+            <svg viewBox="0 0 24 24">
+                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3 3.1-3 1.71 0 3.1 1.29 3.1 3v2z"/>
+            </svg>
+            Processed locally on your device
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const dropText = document.getElementById('dropText');
+        const statusBadge = document.getElementById('statusBadge');
+        const processBtn = document.getElementById('processBtn');
+
+        let selectedFile = null;
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        ['dragleave', 'dragend'].forEach(evt => {
+            dropZone.addEventListener(evt, () => dropZone.classList.remove('dragover'));
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                showStatus('Please select a valid PDF file.', 'error');
+                selectedFile = null;
+                processBtn.style.display = 'none';
+                return;
+            }
+
+            selectedFile = file;
+            dropText.innerHTML = `<strong>${file.name}</strong> <span style="color:#86868b; font-weight:normal;">(${(file.size / (1024 * 1024)).toFixed(1)} MB)</span>`;
+            showStatus('Ready to unshuffle', 'info');
+            processBtn.style.display = 'block';
+        }
+
+        function showStatus(msg, type) {
+            statusBadge.innerHTML = msg;
+            statusBadge.className = `status-badge ${type}`;
+            statusBadge.style.display = 'block';
+        }
+
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            if (typeof PDFLib === 'undefined') {
+                showStatus('Missing pdf-lib library.', 'error');
+                return;
+            }
+
+            try {
+                processBtn.disabled = true;
+                showStatus('Processing pages...', 'info');
+
+                const arrayBuffer = await selectedFile.arrayBuffer();
+                const srcDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+                const totalPages = srcDoc.getPageCount();
+
+                if (totalPages % 2 !== 0) {
+                    showStatus(`Document has odd total pages (${totalPages}). Duplex scan requires even pages.`, 'error');
+                    processBtn.disabled = false;
+                    return;
+                }
+
+                const N = totalPages / 2;
+                const newDoc = await PDFLib.PDFDocument.create();
+
+                const newOrder = [];
+                for (let i = 0; i < N; i++) {
+                    newOrder.push(i);                 // Odds (forward)
+                    newOrder.push(totalPages - 1 - i); // Evens (reverse)
+                }
+
+                const copiedPages = await newDoc.copyPages(srcDoc, newOrder);
+                copiedPages.forEach(page => newDoc.addPage(page));
+
+                const pdfBytes = await newDoc.save();
+
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const downloadUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                const outName = selectedFile.name.replace(/\.pdf$/i, '') + '_unshuffled.pdf';
+                a.download = outName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(downloadUrl);
+
+                showStatus(`Completed! <strong>${outName}</strong> downloaded.`, 'success');
+            } catch (err) {
+                console.error(err);
+                showStatus('Error: ' + err.message, 'error');
+            } finally {
+                processBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
