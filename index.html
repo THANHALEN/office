@@ -1,154 +1,11 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Office App Store</title>
-  <style>
-    :root {
-      --color-bg-primary: #f8f9fa;
-      --color-card-bg: #ffffff;
-      --color-text-primary: #121212;
-      --color-text-muted: #666666;
-      --color-accent: #2563eb;
-      --color-border: #e5e7eb;
-      --color-hover: #f3f4f6;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --color-bg-primary: #0a0a0a;
-        --color-card-bg: #141414;
-        --color-text-primary: #ededed;
-        --color-text-muted: #888888;
-        --color-accent: #8a2be2;
-        --color-border: #262626;
-        --color-hover: #1f1f1f;
-      }
-    }
-
-    body {
-      background-color: var(--color-bg-primary);
-      color: var(--color-text-primary);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      margin: 0;
-      padding: 40px 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-    }
-
-    header {
-      text-align: center;
-      margin-bottom: 40px;
-    }
-
-    h1 {
-      font-size: 28px;
-      font-weight: 700;
-      margin: 0 0 8px 0;
-      letter-spacing: -0.5px;
-    }
-
-    p.subtitle {
-      color: var(--color-text-muted);
-      font-size: 14px;
-      margin: 0;
-    }
-
-    .app-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      width: 100%;
-      max-width: 440px;
-    }
-
-    .app-card {
-      background-color: var(--color-card-bg);
-      border: 1px solid var(--color-border);
-      border-radius: 16px;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-    }
-
-    .app-card:hover {
-      border-color: var(--color-accent);
-      transform: translateY(-2px);
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    }
-
-    .app-icon {
-      width: 54px;
-      height: 54px;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      margin-bottom: 16px;
-      color: #ffffff;
-    }
-
-    /* Icon Colors */
-    .icon-blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
-    .icon-orange { background: linear-gradient(135deg, #f59e0b, #d97706); }
-    .icon-violet { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
-
-    .app-title {
-      font-size: 17px;
-      font-weight: 600;
-      margin: 0 0 4px 0;
-    }
-
-    .app-desc {
-      color: var(--color-text-muted);
-      font-size: 13px;
-      margin: 0 0 20px 0;
-    }
-
-    .btn-open {
-      background-color: var(--color-hover);
-      color: var(--color-text-primary);
-      border: 1px solid var(--color-border);
-      padding: 10px 24px;
-      border-radius: 20px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      text-decoration: none;
-      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    .btn-open:hover {
-      background-color: var(--color-accent);
-      color: #ffffff;
-      border-color: var(--color-accent);
-    }
-  </style>
-</head>
-<body>
-
-  <header>
-    <h1>Office App Store</h1>
-    <p class="subtitle">Automatically synced with GitHub Repository</p>
-  </header>
-
-  <main class="app-grid">
+<main class="app-grid">
     <!-- App 1: APP KKT GTGT -->
     <div class="app-card">
       <div class="app-icon icon-blue">⚡</div>
       <div class="app-title">APP KKT GTGT</div>
       <div class="app-desc">Web Utility App</div>
-      <a href="./kkt_gtgt.html" class="btn-open">OPEN</a>
+      <!-- Đã thêm /apps/ và sửa đúng tên file, dùng %20 cho khoảng trắng -->
+      <a href="./apps/APP%20KKT%20GTGT.html" class="btn-open">OPEN</a>
     </div>
 
     <!-- App 2: Pdf Unshuffle Apple -->
@@ -156,17 +13,16 @@
       <div class="app-icon icon-orange">⚡</div>
       <div class="app-title">Pdf Unshuffle Apple</div>
       <div class="app-desc">Web Utility App</div>
-      <a href="./pdf_unshuffle.html" class="btn-open">OPEN</a>
+      <!-- Đã thêm /apps/ và sửa đúng tên file -->
+      <a href="./apps/pdf_unshuffle_apple.html" class="btn-open">OPEN</a>
     </div>
 
-    <!-- App 3: Quick HTML Exporter (Mới bổ sung) -->
+    <!-- App 3: Quick HTML Exporter -->
     <div class="app-card">
       <div class="app-icon icon-violet">🛠️</div>
       <div class="app-title">Quick HTML Exporter</div>
       <div class="app-desc">Terminal Utility App</div>
-      <a href="./html_exporter.html" class="btn-open">OPEN</a>
+      <!-- Đã thêm /apps/ -->
+      <a href="./apps/html_exporter.html" class="btn-open">OPEN</a>
     </div>
   </main>
-
-</body>
-</html>
